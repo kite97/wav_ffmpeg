@@ -1,0 +1,6 @@
+#!/bin/bash
+fullpath=./ring/$1
+filename=$(basename $fullpath .amr)
+dirname=$(dirname $fullpath)
+./ffmpeg -y -i ${fullpath} -vn -ar 8000 -ac 1 -acodec pcm_s16le $dirname/${filename}.wav &>/dev/null
+echo $?

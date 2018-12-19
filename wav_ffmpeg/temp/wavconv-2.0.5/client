@@ -1,0 +1,124 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%! -smp disable -setcookie 111222333
+main([Name, Para, Server]) ->
+    io:format("Name: ~p~n", [Name]),
+    R = net_kernel:start([list_to_atom(Name), longnames]),
+    io:format("Start: ~p~n", [R]),
+    N = list_to_integer(Para),
+    loop(list_to_atom(Server), N, false).
+
+loop(S, N, C) ->
+    timer:sleep(1000),
+    case net_kernel:connect_node(S) of
+        true when C =:= false ->
+            io:format("New Connect: ~p~n", [true]),
+            lists:foreach(fun(_) ->
+                                 erlang:spawn(fun() -> process_loop(not_connected) end)
+                         end, lists:seq(1, N)),
+            loop(S, N, true);
+        true ->
+            io:format("Old Connect: ~p~n", [true]),
+            loop(S, N, C);
+        false ->
+            io:format("Not Connect: ~p~n", [false]),
+            loop(S, N, false)
+    end.
+
+process_loop(Connected) ->
+    io:format("~p process_looping...~n", [self()]),
+    case global:whereis_name(conv_server) of
+        undefined when Connected =:= not_connected->
+            io:format("~p got to sleep~n", [self()]),
+            timer:sleep(1000),
+            process_loop(not_connected);
+        undefined ->
+            io:format("~p server down, exit~n", [self()]),
+            exit(normal);
+        Pid when is_pid(Pid) ->
+            io:format("~p geting req ...~n", [self()]),
+            {File, Req} = try gen_server:call(Pid, req, 5000) of
+                      Req_ -> Req_
+                  catch E:R ->
+                            io:format("~p geting req timeout ~p~n", [self(), {E,R}]),
+                            exit(normal)
+                  end,
+            io:format("~p get ~p:~p~n", [self(), File, Req]),
+            case convert(Req) of
+                none when File =:= none ->
+                    io:format("~p convert reply none~n", [self()]),
+                    process_loop(connected);
+                Result ->
+                    io:format("~p convert reply for ~p ~p~n", [self(), File, Result]),
+                    try gen_server:call(Pid, {rep, File, Result}, 5000) of
+                        _ -> ok
+                    catch M:N ->
+                            io:format("~p geting req timeout ~p~n", [self(), {M,N}]),
+                            exit(normal)
+                    end,
+                    process_loop(connected)
+            end
+    end.
+convert([]) ->
+    io:format("~p nothing to do, sleep~n", [self()]),
+    timer:sleep(1000),
+    none;
+convert(Files) ->
+    io:format("~p processing ~p~n", [self(), Files]),
+
+    NBModeSet = [],
+    WBModeSet = [8],
+    Targets = lists:map(fun(M) -> {nb, M} end, NBModeSet) ++
+              lists:map(fun(M) -> {wb, M} end, WBModeSet),
+
+    lists:map(fun(File) ->
+                      {File, [{wav, none, convert_wav(File)}] ++ lists:map(fun({Ver, Mode}) -> {Ver, Mode, convert_one(File, Ver, Mode)} end, Targets) ++ [{rmwav, none, rm_wav(File)}]}
+              end, Files).
+
+convert_wav(File) ->
+    Port = open_port({spawn_executable, "./a2w"}, [ use_stdio
+                                                  , stream
+                                                  , {args,[File]}]),
+    receive
+        {_, {data ,M}} ->
+            io:format("~p convert file ~p get ~p~n", [self(), File, M]),
+            case M of
+                "0\n" -> succ;
+                _ -> fail
+            end
+    after 5000 ->
+              port_close(Port),
+              timeout
+    end.
+convert_one(File, Ver, Mode) ->
+    Port = open_port({spawn_executable, "./w2a"}, [ use_stdio
+                                                  , stream
+                                                  , {args,[ File
+                                                          , atom_to_list(Ver)
+                                                          , integer_to_list(Mode)]}]),
+    receive
+        {_, {data ,M}} ->
+            io:format("~p convert file ~p get ~p~n", [self(), File, M]),
+            case M of
+                "0\n" -> succ;
+                _ -> fail
+            end
+    after 5000 ->
+              port_close(Port),
+              timeout
+    end.
+rm_wav(File) ->
+    Port = open_port({spawn_executable, "./rmwav"}, [ use_stdio
+						   , stream
+						   , {args,[File]}]),
+    receive
+	{_, {data,M}} ->
+	    io:format("~p rm wav file ~p get ~p~n", [self(), File, M]),
+	    case M of
+                "0\n" -> succ;
+                _ -> fail
+            end
+    after 5000 ->
+              port_close(Port),
+              timeout
+    end.

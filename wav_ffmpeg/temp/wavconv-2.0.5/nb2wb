@@ -1,0 +1,6 @@
+#!/bin/bash
+fullpath=$1
+filename=$(basename $fullpath .amr)
+dirname=$(dirname $fullpath)
+./ffmpeg -y -i ${fullpath} -ar 16000 -ac 1 -acodec amr_wb -ab 23850 ${dirname}/${filename}_wb_8.amr &>/dev/null
+echo $?

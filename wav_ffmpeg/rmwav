@@ -1,0 +1,6 @@
+#!/bin/bash
+fullpath=./ring/$1
+filename=$(basename $fullpath .amr)
+dirname=$(dirname $fullpath)
+rm ${dirname}/${filename}.wav &>/dev/null
+echo $?

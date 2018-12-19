@@ -1,0 +1,16 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%! -smp disable -setcookie 111222333
+main([Name, NamePackages]) ->
+    io:format("name: ~p~n", [Name]),
+    R = net_kernel:start([list_to_atom(Name), longnames]),
+    io:format("kernel start: ~p~n", [R]),
+    {ok, Pid} = gen_server:start({global, conv_server}, conv_server, [NamePackages], []),
+    io:format("server start: ~p~n", [R]),
+    loop(Pid).
+
+loop(Pid) ->
+    timer:sleep(1000),
+    {T,S,F,P,R} = gen_server:call(Pid, status),
+    io:format("status Total: ~p, Succ: ~p, Fail: ~p, Processing: ~p, Remain: ~p~n", [T,S,F,P,R]),
+    loop(Pid).

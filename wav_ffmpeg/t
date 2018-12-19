@@ -1,0 +1,138 @@
+[1mdiff --git a/Makefile b/Makefile[m
+[1mindex eb12e85..74be591 100644[m
+[1m--- a/Makefile[m
+[1m+++ b/Makefile[m
+[36m@@ -3,6 +3,6 @@[m [mall:[m
+ clean:[m
+ 	@rm *.beam *~  server.pid[m
+ run_server: all[m
+[31m-	./server server@127.0.0.1 a b c d e f g audio.wav[m
+[32m+[m	[32m./server server@127.0.0.1 allnamepack[m
+ run_client: all[m
+ 	./client client@127.0.0.1 1 server@127.0.0.1[m
+[1mdiff --git a/client b/client[m
+[1mindex 4cfcfde..36550bd 100755[m
+[1m--- a/client[m
+[1m+++ b/client[m
+[36m@@ -50,7 +50,7 @@[m [mprocess_loop(Connected) ->[m
+                     process_loop(connected);[m
+                 Result ->[m
+                     io:format("~p convert reply ~p~n", [self(), Result]),[m
+[31m-                    try gen_server:call(Pid, {rep, Req, Result}, 5000) of[m
+[32m+[m[32m                    try gen_server:call(Pid, {rep, Result}, 5000) of[m
+                         _ -> ok[m
+                     catch M:N ->[m
+                             io:format("~p geting req timeout ~p~n", [self(), {M,N}]),[m
+[36m@@ -63,15 +63,17 @@[m [mconvert([]) ->[m
+     io:format("~p nothing to do, sleep~n", [self()]),[m
+     timer:sleep(1000),[m
+     none;[m
+[31m-convert(File) ->[m
+[31m-    io:format("~p processing ~p~n", [self(), File]),[m
+[32m+[m[32mconvert(Files) ->[m
+[32m+[m[32m    io:format("~p processing ~p~n", [self(), Files]),[m
+ [m
+     NBModeSet = [0,2,5,7],[m
+     WBModeSet = [0,2,5,8],[m
+     Targets = lists:map(fun(M) -> {nb, M} end, NBModeSet) ++[m
+               lists:map(fun(M) -> {wb, M} end, WBModeSet),[m
+ [m
+[31m-    lists:map(fun({Ver, Mode}) -> {Ver, Mode, convert_one(File, nb, 7)} end, Targets).[m
+[32m+[m[32m    lists:map(fun(File) ->[m
+[32m+[m[32m                      {File, lists:map(fun({Ver, Mode}) -> {Ver, Mode, convert_one(File, nb, 7)} end, Targets)}[m
+[32m+[m[32m              end, Files).[m
+ [m
+ convert_one(File, Ver, Mode) ->[m
+     Port = open_port({spawn_executable, "./w2a"}, [ use_stdio[m
+[1mdiff --git a/conv_server.erl b/conv_server.erl[m
+[1mindex 5d94a11..0b6b529 100644[m
+[1m--- a/conv_server.erl[m
+[1m+++ b/conv_server.erl[m
+[36m@@ -12,7 +12,8 @@[m
+                , fail = 0[m
+                , processing = 0[m
+                , remain = 0[m
+[31m-               , task}).[m
+[32m+[m[32m               , task[m
+[32m+[m[32m               , log}).[m
+ [m
+ -define(SERVER, ?MODULE).[m
+ -define(timeout, 10000).[m
+[36m@@ -37,11 +38,16 @@[m
+ %%                         {stop, Reason}[m
+ %% Description: Initiates the server[m
+ %%--------------------------------------------------------------------[m
+[31m-init([T]) ->[m
+[32m+[m[32minit([NamePackages]) ->[m
+[32m+[m[32m    io:format("NamePackages: ~p~n", [NamePackages]),[m
+[32m+[m[32m    T = get_file_names(NamePackages),[m
+[32m+[m[32m    io:format("T: ~p~n", [T]),[m
+     L = length(T),[m
+[32m+[m[32m    {ok, Log} = file:open("server.log", [write, append]),[m
+     {ok, #state{ total = L[m
+                , remain = L[m
+[31m-               , task = T}}.[m
+[32m+[m[32m               , task = T[m
+[32m+[m[32m               , log = Log}}.[m
+ [m
+ %%--------------------------------------------------------------------[m
+ %% Function: %% handle_call(Request, From, State) -> {reply, Reply, State} |[m
+[36m@@ -61,18 +67,24 @@[m [mhandle_call(status, _From, #state{ total = Total[m
+ handle_call(req, _From, #state{task= []} = State) ->[m
+     {reply, [], State};[m
+ handle_call(req, _From, #state{ task= [H|Task][m
+[31m-                              , processing = Processing} = State) ->[m
+[31m-    {reply, H, State#state{ task = Task[m
+[32m+[m[32m                              , processing = Processing[m
+[32m+[m[32m                              , log = Log} = State) ->[m
+[32m+[m[32m    Names = get_file_names("tasks/"++H),[m
+[32m+[m[32m    %%CmdR = os:cmd("mv "++"tasks/"++H ++"processing/"++H),[m
+[32m+[m[32m    %%io:format(Log, "mv ~p~n", [CmdR]),[m
+[32m+[m[32m    {reply, Names, State#state{ task = Task[m
+                           , processing = Processing + 1}};[m
+[31m-handle_call({rep, File, Result}, _From, #state{ succ = Succ[m
+[32m+[m[32mhandle_call({rep, Result}, _From, #state{ succ = Succ[m
+                                                , fail = Fail[m
+                                                , processing = Processing[m
+                                                , remain = Remain} = State) ->[m
+[31m-    io:format("~p ~p~n", [File, Result]),[m
+[31m-    Pass = lists:all(fun({_,_,R}) -> case R of[m
+[32m+[m[32m    io:format("~p~n", [Result]),[m
+[32m+[m[32m    Pass = lists:all(fun({File, RList}) ->[m
+[32m+[m[32m                lists:all(fun({_,_,R}) -> case R of[m
+                                            succ -> true;[m
+                                            fail -> false[m
+[31m-                                       end end, Result),[m
+[32m+[m[32m                                       end end, RList)[m
+[32m+[m[32m                     end, Result),[m
+     {NSucc, NFail} = case Pass of[m
+                          true ->[m
+                              {Succ+1, Fail};[m
+[36m@@ -125,3 +137,9 @@[m [mcode_change(_OldVsn, State, _Extra) ->[m
+ %%--------------------------------------------------------------------[m
+ %%% Internal functions[m
+ %%--------------------------------------------------------------------[m
+[32m+[m
+[32m+[m[32mget_file_names(Src) ->[m
+[32m+[m[32m    {ok, Bin} = file:read_file(Src),[m
+[32m+[m[32m    lists:map(fun(B) -> binary_to_list(B) end,[m
+[32m+[m[32m        lists:filter(fun(<<>>) -> false;[m
+[32m+[m[32m                        (_) -> true end, binary:split(Bin, <<"\n">>, [global]))).[m
+[1mdiff --git a/server b/server[m
+[1mindex 024c4ca..28d6130 100755[m
+[1m--- a/server[m
+[1m+++ b/server[m
+[36m@@ -1,11 +1,11 @@[m
+ #!/usr/bin/env escript[m
+ %% -*- erlang -*-[m
+ %%! -smp disable -setcookie 111222333[m
+[31m-main([Name|T]) ->[m
+[32m+[m[32mmain([Name, NamePackages]) ->[m
+     io:format("name: ~p~n", [Name]),[m
+     R = net_kernel:start([list_to_atom(Name), longnames]),[m
+     io:format("kernel start: ~p~n", [R]),[m
+[31m-    {ok, Pid} = gen_server:start({global, conv_server}, conv_server, [T], []),[m
+[32m+[m[32m    {ok, Pid} = gen_server:start({global, conv_server}, conv_server, [NamePackages], []),[m
+     io:format("server start: ~p~n", [R]),[m
+     loop(Pid).[m
+ [m

@@ -1,0 +1,76 @@
+#!/bin/bash
+getbitrate() {
+    case $1_$2 in
+        "nb_0")
+            br=4750
+            ;;
+        "nb_1")
+            br=5150
+            ;;
+        "nb_2")
+            br=5900 
+            ;;
+        "nb_3")
+            br=6700 
+            ;;
+        "nb_4")
+            br=7400 
+            ;;
+        "nb_5")
+            br=7950 
+            ;;
+        "nb_6")
+            br=10200 
+            ;;
+        "nb_7")
+            br=12200 
+            ;;
+        "wb_0")
+            br=6600 
+            ;;
+        "wb_1")
+            br=8850 
+            ;;
+        "wb_2")
+            br=12650 
+            ;;
+        "wb_3")
+            br=14250 
+            ;;
+        "wb_4")
+            br=15850 
+            ;;
+        "wb_5")
+            br=18250 
+            ;;
+        "wb_6")
+            br=19850 
+            ;;
+        "wb_7")
+            br=23050 
+            ;;
+        "wb_8")
+            br=23850 
+            ;;
+    esac
+    echo $br
+}
+fullpath=./ring/$1
+ver=$2
+mode=$3
+bitrate=$(getbitrate $ver $mode)
+case $ver in
+    "nb")
+        rate=8000
+        namever=""
+        ;;
+    "wb")
+        rate=16000
+        namever="_wb"
+        ;;
+esac
+filename=$(basename $fullpath .amr)
+dirname=$(dirname $fullpath)
+
+./ffmpeg -y -i ${dirname}/${filename}.wav -ar $rate -ac 1 -acodec amr_$ver -ab $bitrate $dirname/${filename}${namever}_${mode}.amr &>/dev/null
+echo $?
